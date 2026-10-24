@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// Release signing key lives outside the repo; see README.
+val signingProps = file(
+    providers.gradleProperty("itts.signing").orNull
+        ?: "${System.getProperty("user.home")}/keystores/itts-release.properties"
+)
 
 android {
     namespace = "net.biavati.itts"
@@ -16,6 +24,36 @@ android {
         versionName = "1.0"
         // Only ship the ABI real phones use; keeps the APK small.
         ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    signingConfigs {
+        if (signingProps.exists()) {
+            create("release") {
+                val p = Properties().apply { signingProps.inputStream().use { load(it) } }
+                storeFile = file(p.getProperty("storeFile"))
+                storePassword = p.getProperty("storePassword")
+                keyAlias = p.getProperty("keyAlias")
+                keyPassword = p.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Installs next to the release version instead of conflicting with it.
+            applicationIdSuffix = ".debug"
+            resValue("string", "app_name", "Trascrivi (dev)")
+        }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
+            resValue("string", "app_name", "Trascrivi")
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+        resValues = true
     }
 
     compileOptions {

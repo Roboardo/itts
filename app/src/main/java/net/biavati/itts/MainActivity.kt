@@ -174,6 +174,20 @@ open class MainActivity : Activity() {
         startActivity(Intent.createChooser(send, null))
     }
 
+    private fun about() {
+        AlertDialog.Builder(this)
+            .setTitle("${getString(R.string.app_name)} ${BuildConfig.VERSION_NAME}")
+            .setMessage(
+                "Trascrizione offline dei vocali: l'audio non lascia mai il telefono.\n\n" +
+                    "Modello: NVIDIA Parakeet TDT 0.6B v3, licenza CC-BY-4.0 " +
+                    "(huggingface.co/nvidia/parakeet-tdt-0.6b-v3), convertito in ONNX da sherpa-onnx.\n\n" +
+                    "Motore: sherpa-onnx (Apache-2.0) e ONNX Runtime (MIT).\n\n" +
+                    "github.com/Roboardo/itts"
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun pick() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
@@ -247,7 +261,7 @@ open class MainActivity : Activity() {
         if (!popup) button("Scegli file") { pick() }
         copyBtn = button("Copia") { copy() }
         shareBtn = button("Condividi") { share() }
-        if (popup) button("Chiudi") { finish() }
+        if (popup) button("Chiudi") { finish() } else button("Info") { about() }
         root.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         setContentView(root)
