@@ -23,7 +23,10 @@ import android.widget.Toast
 import java.io.File
 import java.util.concurrent.Executors
 
-class MainActivity : Activity() {
+open class MainActivity : Activity() {
+
+    /** Compact dialog layout, used when opened from WhatsApp's share sheet. */
+    protected open val popup = false
 
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
@@ -33,6 +36,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (popup) setFinishOnTouchOutside(false)
         buildUi()
         output.text = lastText
         updateButtons()
@@ -172,7 +176,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(px(16), px(16), px(16), px(16))
         }
-        root.setOnApplyWindowInsetsListener { v, insets ->
+        if (!popup) root.setOnApplyWindowInsetsListener { v, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             v.setPadding(px(16) + bars.left, px(16) + bars.top, px(16) + bars.right, px(16) + bars.bottom)
             insets
@@ -180,7 +184,7 @@ class MainActivity : Activity() {
 
         root.addView(TextView(this).apply {
             text = getString(R.string.app_name)
-            textSize = 24f
+            textSize = if (popup) 20f else 24f
             setTypeface(typeface, Typeface.BOLD)
         })
 
@@ -202,8 +206,19 @@ class MainActivity : Activity() {
             setPadding(0, px(12), 0, px(12))
             setLineSpacing(0f, 1.2f)
         }
-        root.addView(ScrollView(this).apply { addView(output) },
-            LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        if (popup) {
+            // Grow with the text, but keep the buttons on screen.
+            val maxH = resources.displayMetrics.heightPixels * 55 / 100
+            val scroll = object : ScrollView(this) {
+                override fun onMeasure(widthSpec: Int, heightSpec: Int) =
+                    super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST))
+            }
+            scroll.addView(output)
+            root.addView(scroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        } else {
+            root.addView(ScrollView(this).apply { addView(output) },
+                LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        }
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -214,12 +229,16 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
             row.addView(this, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         }
-        button("Scegli file") { pick() }
+        if (!popup) button("Scegli file") { pick() }
         copyBtn = button("Copia") { copy() }
         shareBtn = button("Condividi") { share() }
+        if (popup) button("Chiudi") { finish() }
         root.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         setContentView(root)
+        if (popup) {
+            window.setLayout(resources.displayMetrics.widthPixels * 92 / 100, WRAP_CONTENT)
+        }
     }
 
     companion object {
