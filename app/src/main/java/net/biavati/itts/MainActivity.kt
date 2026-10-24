@@ -21,7 +21,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 open class MainActivity : Activity() {
 
@@ -33,10 +35,12 @@ open class MainActivity : Activity() {
     private lateinit var output: TextView
     private lateinit var copyBtn: Button
     private lateinit var shareBtn: Button
+    private var myJob: AtomicBoolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (popup) setFinishOnTouchOutside(false)
+        // Tapping outside the popup closes it (and aborts the job, see onDestroy).
+        if (popup) setFinishOnTouchOutside(true)
         buildUi()
         output.text = lastText
         updateButtons()
@@ -49,6 +53,12 @@ open class MainActivity : Activity() {
                     "meglio in Wi‑Fi), poi tutto funziona offline.\n\n" +
                     "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Closing the popup (outside tap, Back, Chiudi) aborts its transcription.
+        if (popup && isFinishing) myJob?.set(true)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -105,14 +115,17 @@ open class MainActivity : Activity() {
         updateButtons()
         status.text = "In coda…"
 
+        val cancel = AtomicBoolean(false)
+        myJob = cancel
         worker.execute {
             try {
-                val recognizer = ModelManager.get(applicationContext) { msg -> ui { status.text = msg } }
+                cancel.throwIfSet()
+                val recognizer = ModelManager.get(applicationContext, cancel) { msg -> ui { status.text = msg } }
                 ui {
                     status.text = "Trascrizione in corso…"
                     progress.isIndeterminate = false
                 }
-                val text = Transcriber(recognizer).transcribe(file) { pct, partial ->
+                val text = Transcriber(recognizer).transcribe(file, cancel) { pct, partial ->
                     ui {
                         progress.progress = pct
                         status.text = "Trascrizione in corso… $pct%"
@@ -124,6 +137,8 @@ open class MainActivity : Activity() {
                     output.text = text
                     status.text = if (text.isBlank()) "Nessun parlato riconosciuto." else "Fatto."
                 }
+            } catch (e: CancellationException) {
+                // Popup was closed; nothing to show.
             } catch (e: Throwable) {
                 ui { status.text = "Errore: ${e.message ?: e.javaClass.simpleName}" }
             } finally {

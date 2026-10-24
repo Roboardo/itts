@@ -7,6 +7,8 @@ import android.media.MediaFormat
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import java.io.File
 import java.nio.ByteOrder
+import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.floor
@@ -19,12 +21,13 @@ import kotlin.math.sin
 class Transcriber(private val recognizer: OfflineRecognizer) {
 
     /** [onUpdate] receives (progress 0..100, text so far). */
-    fun transcribe(file: File, onUpdate: (Int, String) -> Unit): String {
+    fun transcribe(file: File, cancel: AtomicBoolean, onUpdate: (Int, String) -> Unit): String {
         // Decoding is fast compared to recognition: count it as the first 10%.
-        val audio = decode(file) { pct -> onUpdate(pct / 10, "") }
+        val audio = decode(file, cancel) { pct -> onUpdate(pct / 10, "") }
         val chunks = split(audio)
         val text = StringBuilder()
         for ((i, range) in chunks.withIndex()) {
+            cancel.throwIfSet()
             val stream = recognizer.createStream()
             try {
                 stream.acceptWaveform(audio.copyOfRange(range.first, range.last + 1), TARGET_RATE)
@@ -72,7 +75,7 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
     }
 
     /** Decodes the whole file to 16 kHz mono floats in [-1, 1]. */
-    private fun decode(file: File, onProgress: (Int) -> Unit): FloatArray {
+    private fun decode(file: File, cancel: AtomicBoolean, onProgress: (Int) -> Unit): FloatArray {
         val extractor = MediaExtractor()
         extractor.setDataSource(file.absolutePath)
         val track = (0 until extractor.trackCount).firstOrNull {
@@ -104,6 +107,7 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
 
         try {
             while (true) {
+                cancel.throwIfSet()
                 if (!inputDone) {
                     val idx = codec.dequeueInputBuffer(10_000)
                     if (idx >= 0) {
@@ -222,4 +226,9 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
         const val TARGET_RATE = 16000
         const val MAX_CHUNK_S = 30
     }
+}
+
+/** Aborts the current job when the user has closed the popup. */
+fun AtomicBoolean.throwIfSet() {
+    if (get()) throw CancellationException()
 }

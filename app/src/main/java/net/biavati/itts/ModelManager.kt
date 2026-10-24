@@ -9,6 +9,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Downloads (once) and loads NVIDIA Parakeet TDT 0.6B v3 (int8), a multilingual
@@ -37,11 +38,11 @@ object ModelManager {
 
     /** Returns the loaded recognizer, downloading the model first if needed. Blocking. */
     @Synchronized
-    fun get(ctx: Context, onProgress: (String) -> Unit): OfflineRecognizer {
+    fun get(ctx: Context, cancel: AtomicBoolean, onProgress: (String) -> Unit): OfflineRecognizer {
         recognizer?.let { return it }
         // Free the space used by the old Vosk model.
         File(ctx.filesDir, "model-it").deleteRecursively()
-        if (!isInstalled(ctx)) download(ctx, onProgress)
+        if (!isInstalled(ctx)) download(ctx, cancel, onProgress)
         onProgress("Caricamento modello…")
         val dir = modelDir(ctx)
         val config = OfflineRecognizerConfig(
@@ -60,7 +61,7 @@ object ModelManager {
         return OfflineRecognizer(null, config).also { recognizer = it }
     }
 
-    private fun download(ctx: Context, onProgress: (String) -> Unit) {
+    private fun download(ctx: Context, cancel: AtomicBoolean, onProgress: (String) -> Unit) {
         val dir = modelDir(ctx).apply { mkdirs() }
         val total = FILES.sumOf { it.second }
         var before = 0L
@@ -84,6 +85,7 @@ object ModelManager {
                             val buf = ByteArray(256 * 1024)
                             var lastMb = -1L
                             while (true) {
+                                cancel.throwIfSet()
                                 val n = input.read(buf)
                                 if (n < 0) break
                                 out.write(buf, 0, n)
