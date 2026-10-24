@@ -1,6 +1,7 @@
 package net.biavati.itts
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -39,7 +41,8 @@ class MainActivity : Activity() {
             status.text = if (ModelManager.isInstalled(this))
                 "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
             else
-                "Al primo uso verrà scaricato il modello italiano (~50 MB), poi tutto funziona offline.\n\n" +
+                "Al primo uso verrà scaricato il modello di trascrizione (~${ModelManager.TOTAL_MB} MB, " +
+                    "meglio in Wi‑Fi), poi tutto funziona offline.\n\n" +
                     "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
         }
     }
@@ -74,7 +77,23 @@ class MainActivity : Activity() {
             status.text = "Impossibile leggere il file: ${e.message}"
             return
         }
+        if (ModelManager.isInstalled(this)) {
+            run(file)
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Scaricare il modello?")
+                .setMessage("Serve una volta sola: ~${ModelManager.TOTAL_MB} MB. " +
+                    "Consigliato il Wi‑Fi. Se si interrompe, riprende da dove era rimasto.")
+                .setPositiveButton("Scarica") { _, _ -> run(file) }
+                .setNegativeButton("Annulla") { _, _ -> file.delete() }
+                .setOnCancelListener { file.delete() }
+                .show()
+        }
+    }
+
+    private fun run(file: File) {
         busy = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lastText = ""
         output.text = ""
         progress.visibility = View.VISIBLE
@@ -84,12 +103,12 @@ class MainActivity : Activity() {
 
         worker.execute {
             try {
-                val model = ModelManager.get(applicationContext) { msg -> ui { status.text = msg } }
+                val recognizer = ModelManager.get(applicationContext) { msg -> ui { status.text = msg } }
                 ui {
                     status.text = "Trascrizione in corso…"
                     progress.isIndeterminate = false
                 }
-                val text = Transcriber(model).transcribe(file) { pct, partial ->
+                val text = Transcriber(recognizer).transcribe(file) { pct, partial ->
                     ui {
                         progress.progress = pct
                         status.text = "Trascrizione in corso… $pct%"
@@ -107,6 +126,7 @@ class MainActivity : Activity() {
                 file.delete()
                 busy = false
                 ui {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     progress.visibility = View.GONE
                     updateButtons()
                 }

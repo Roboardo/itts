@@ -30,8 +30,16 @@ android {
     }
 }
 
+// sherpa-onnx (offline speech recognition, prebuilt native libs, no NDK needed)
+// isn't on Maven Central, so fetch the release AAR once into app/libs.
+val sherpaVersion = "2.0.0"
+val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    uri("https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/sherpa-onnx-$sherpaVersion.aar")
+        .toURL().openStream().use { input -> sherpaAar.outputStream().use { input.copyTo(it) } }
+}
+
 dependencies {
-    // Offline speech recognition (prebuilt native libs, no NDK needed).
-    implementation("com.alphacephei:vosk-android:0.3.75")
-    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation(files(sherpaAar))
 }
