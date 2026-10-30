@@ -19,6 +19,8 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -51,6 +53,44 @@ open class MainActivity : Activity() {
         updateButtons()
         if (savedInstanceState == null) handleIntent(intent)
         showHint()
+        if (!popup && ModelManager.needsChoice(this)) chooseQuality {}
+    }
+
+    /** First-use choice of quality. Not cancelable: a model is needed to go on. */
+    private fun chooseQuality(then: () -> Unit) {
+        val px = (20 * resources.displayMetrics.density).toInt()
+        val models = SpeechModel.entries
+        val group = RadioGroup(this).apply {
+            models.forEachIndexed { i, m ->
+                addView(RadioButton(context).apply {
+                    id = i + 1
+                    text = "${m.quality} (${m.totalMb} MB)"
+                })
+            }
+            check(models.indexOf(SpeechModel.STANDARD) + 1)
+        }
+        val view = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px, px / 2, px, 0)
+            addView(group)
+            addView(TextView(context).apply {
+                text = "Puoi modificare la scelta dall'applicazione"
+                textSize = 12f
+                setPadding(0, px / 2, 0, 0)
+            })
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Scegli qualità trascrizione:")
+            .setView(view)
+            .setCancelable(false)
+            .setPositiveButton("OK") { _, _ ->
+                val model = models[group.checkedRadioButtonId - 1]
+                ModelManager.confirmChoice(this, model)
+                modelPicker?.setSelection(models.indexOf(model), false)
+                showHint()
+                then()
+            }
+            .show()
     }
 
     private fun showHint() {
@@ -100,6 +140,11 @@ open class MainActivity : Activity() {
             status.text = "Impossibile leggere il file: ${e.message}"
             return
         }
+        // Sharing from WhatsApp can be the very first use of the app.
+        if (ModelManager.needsChoice(this)) chooseQuality { confirmAndRun(file) } else confirmAndRun(file)
+    }
+
+    private fun confirmAndRun(file: File) {
         val model = ModelManager.selected(this)
         if (ModelManager.isInstalled(this, model)) {
             run(file, model)

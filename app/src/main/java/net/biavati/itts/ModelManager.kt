@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 enum class SpeechModel(
     val label: String,
+    val quality: String,
     val dirName: String,
     val baseUrl: String,
     val files: List<Pair<String, Long>>,
@@ -25,6 +26,7 @@ enum class SpeechModel(
 ) {
     FAST(
         "Veloce (Whisper Base)",
+        "Bassa, veloce",
         "whisper-base",
         "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/",
         listOf(
@@ -38,6 +40,7 @@ enum class SpeechModel(
     /** NVIDIA Parakeet TDT 0.6B v3, strong Italian with built-in punctuation. */
     STANDARD(
         "Standard (Parakeet v3)",
+        "Default",
         "parakeet-v3",
         "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/",
         listOf(
@@ -61,6 +64,7 @@ enum class SpeechModel(
     ),
     ACCURATE(
         "Preciso (Whisper Turbo)",
+        "Alta, lento",
         "whisper-turbo",
         "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo/resolve/main/",
         listOf(
@@ -90,6 +94,7 @@ private fun whisperConfig(dir: File, name: String) = OfflineModelConfig(
 object ModelManager {
     private const val PREFS = "settings"
     private const val KEY_MODEL = "model"
+    private const val KEY_CHOSEN = "model_chosen"
 
     @Volatile
     private var recognizer: OfflineRecognizer? = null
@@ -104,6 +109,16 @@ object ModelManager {
 
     fun select(ctx: Context, model: SpeechModel) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_MODEL, model.name).apply()
+    }
+
+    /** True on first use: nothing chosen yet and no model on disk (so not for existing installs). */
+    fun needsChoice(ctx: Context) =
+        !ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CHOSEN, false) &&
+            SpeechModel.entries.none { diskBytes(ctx, it) > 0 }
+
+    fun confirmChoice(ctx: Context, model: SpeechModel) {
+        select(ctx, model)
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CHOSEN, true).apply()
     }
 
     fun isInstalled(ctx: Context, model: SpeechModel) =

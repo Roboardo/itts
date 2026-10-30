@@ -21,7 +21,8 @@ Requirements: Android 10+, 64-bit ARM phone (practically every phone since ~2019
 [Releases](https://github.com/Roboardo/itts/releases) and open it
 (allow "install unknown apps" when asked).
 
-Pick a speech model on the main screen; it is also used when sharing:
+The app asks which transcription quality you want on first use. You can change
+it later on the main screen; the choice is also used when sharing:
 
 | Model | Download | Use it when |
 |---|---|---|
