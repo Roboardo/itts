@@ -21,13 +21,22 @@ Requirements: Android 10+, 64-bit ARM phone (practically every phone since ~2019
 [Releases](https://github.com/Roboardo/itts/releases) and open it
 (allow "install unknown apps" when asked).
 
-On first use the app downloads the speech model (~670 MB, Wi‑Fi recommended).
+Pick a speech model on the main screen; it is also used when sharing:
+
+| Model | Download | Use it when |
+|---|---|---|
+| Veloce (Whisper Base) | ~160 MB | you want the text quickly |
+| Standard (Parakeet v3, default) | ~670 MB | everyday use |
+| Preciso (Whisper Turbo) | ~1 GB | accuracy matters more than speed |
+
+The first time you use a model the app downloads it (Wi‑Fi recommended).
 After that it works offline.
 
 ## Credits
 
-- Speech model: [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3),
-  CC-BY-4.0, ONNX int8 export by the sherpa-onnx project.
+- Speech models: [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3),
+  CC-BY-4.0, and [OpenAI Whisper](https://github.com/openai/whisper), MIT, ONNX int8
+  exports by the sherpa-onnx project.
 - Inference: [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0),
   [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT).
 

@@ -14,10 +14,13 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
@@ -35,6 +38,7 @@ open class MainActivity : Activity() {
     private lateinit var output: TextView
     private lateinit var copyBtn: Button
     private lateinit var shareBtn: Button
+    private var modelPicker: Spinner? = null
     private var myJob: AtomicBoolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,14 +49,18 @@ open class MainActivity : Activity() {
         output.text = lastText
         updateButtons()
         if (savedInstanceState == null) handleIntent(intent)
-        if (!busy && lastText.isEmpty()) {
-            status.text = if (ModelManager.isInstalled(this))
+        showHint()
+    }
+
+    private fun showHint() {
+        if (busy || lastText.isNotEmpty()) return
+        val model = ModelManager.selected(this)
+        status.text = if (ModelManager.isInstalled(this, model))
+            "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
+        else
+            "Al primo uso verrà scaricato il modello di trascrizione (~${model.totalMb} MB, " +
+                "meglio in Wi‑Fi), poi tutto funziona offline.\n\n" +
                 "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
-            else
-                "Al primo uso verrà scaricato il modello di trascrizione (~${ModelManager.TOTAL_MB} MB, " +
-                    "meglio in Wi‑Fi), poi tutto funziona offline.\n\n" +
-                    "Condividi un vocale da WhatsApp con «Trascrivi», oppure scegli un file."
-        }
     }
 
     override fun onDestroy() {
@@ -91,21 +99,22 @@ open class MainActivity : Activity() {
             status.text = "Impossibile leggere il file: ${e.message}"
             return
         }
-        if (ModelManager.isInstalled(this)) {
-            run(file)
+        val model = ModelManager.selected(this)
+        if (ModelManager.isInstalled(this, model)) {
+            run(file, model)
         } else {
             AlertDialog.Builder(this)
                 .setTitle("Scaricare il modello?")
-                .setMessage("Serve una volta sola: ~${ModelManager.TOTAL_MB} MB. " +
+                .setMessage("Serve una volta sola: ~${model.totalMb} MB. " +
                     "Consigliato il Wi‑Fi. Se si interrompe, riprende da dove era rimasto.")
-                .setPositiveButton("Scarica") { _, _ -> run(file) }
+                .setPositiveButton("Scarica") { _, _ -> run(file, model) }
                 .setNegativeButton("Annulla") { _, _ -> file.delete() }
                 .setOnCancelListener { file.delete() }
                 .show()
         }
     }
 
-    private fun run(file: File) {
+    private fun run(file: File, model: SpeechModel) {
         busy = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lastText = ""
@@ -120,7 +129,7 @@ open class MainActivity : Activity() {
         worker.execute {
             try {
                 cancel.throwIfSet()
-                val recognizer = ModelManager.get(applicationContext, cancel) { msg -> ui { status.text = msg } }
+                val recognizer = ModelManager.get(applicationContext, model, cancel) { msg -> ui { status.text = msg } }
                 ui {
                     status.text = "Trascrizione in corso…"
                     progress.isIndeterminate = false
@@ -161,6 +170,7 @@ open class MainActivity : Activity() {
         val has = lastText.isNotBlank() && !busy
         copyBtn.isEnabled = has
         shareBtn.isEnabled = has
+        modelPicker?.isEnabled = !busy
     }
 
     private fun copy() {
@@ -179,8 +189,9 @@ open class MainActivity : Activity() {
             .setTitle("${getString(R.string.app_name)} ${BuildConfig.VERSION_NAME}")
             .setMessage(
                 "Trascrizione offline dei vocali: l'audio non lascia mai il telefono.\n\n" +
-                    "Modello: NVIDIA Parakeet TDT 0.6B v3, licenza CC-BY-4.0 " +
-                    "(huggingface.co/nvidia/parakeet-tdt-0.6b-v3), convertito in ONNX da sherpa-onnx.\n\n" +
+                    "Modelli: NVIDIA Parakeet TDT 0.6B v3, licenza CC-BY-4.0 " +
+                    "(huggingface.co/nvidia/parakeet-tdt-0.6b-v3), e OpenAI Whisper, licenza MIT " +
+                    "(github.com/openai/whisper), convertiti in ONNX da sherpa-onnx.\n\n" +
                     "Motore: sherpa-onnx (Apache-2.0) e ONNX Runtime (MIT).\n\n" +
                     "github.com/Roboardo/itts"
             )
@@ -216,6 +227,27 @@ open class MainActivity : Activity() {
             textSize = if (popup) 20f else 24f
             setTypeface(typeface, Typeface.BOLD)
         })
+
+        if (!popup) {
+            val models = SpeechModel.entries
+            modelPicker = Spinner(this).apply {
+                adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_spinner_dropdown_item,
+                    models.map { "${it.label}, ${it.totalMb} MB" },
+                )
+                setSelection(models.indexOf(ModelManager.selected(this@MainActivity)), false)
+                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                        ModelManager.select(this@MainActivity, models[pos])
+                        showHint()
+                    }
+
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
+                }
+            }
+            root.addView(modelPicker, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        }
 
         status = TextView(this).apply {
             textSize = 15f

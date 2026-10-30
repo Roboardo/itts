@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Only used once, to download the Italian speech model. -->
+    <!-- Only used to download the speech models, once each. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
