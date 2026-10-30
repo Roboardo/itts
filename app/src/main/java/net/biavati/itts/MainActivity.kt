@@ -180,11 +180,12 @@ open class MainActivity : Activity() {
                     status.text = "Trascrizione in corso…"
                     progress.isIndeterminate = false
                 }
-                val text = Transcriber(recognizer).transcribe(file, cancel) { pct, partial ->
+                val text = Transcriber(recognizer).transcribe(file, cancel) { permille, partial ->
                     ui {
-                        progress.progress = pct
-                        status.text = "Trascrizione in corso… $pct%"
-                        output.text = partial
+                        progress.progress = permille
+                        status.text = "Trascrizione in corso… ${permille / 10}%"
+                        // Most ticks don't change the text; don't lose the user's selection.
+                        if (output.text.toString() != partial) output.text = partial
                     }
                 }
                 lastText = text
@@ -338,7 +339,7 @@ open class MainActivity : Activity() {
         root.addView(status)
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
+            max = 1000
             visibility = View.GONE
         }
         root.addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))

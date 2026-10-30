@@ -4,13 +4,16 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.SystemClock
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import java.io.File
 import java.nio.ByteOrder
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.sin
 
@@ -20,19 +23,25 @@ import kotlin.math.sin
  */
 class Transcriber(private val recognizer: OfflineRecognizer) {
 
-    /** [onUpdate] receives (progress 0..100, text so far). */
+    /** [onUpdate] receives (progress 0..1000, text so far). */
     fun transcribe(file: File, cancel: AtomicBoolean, onUpdate: (Int, String) -> Unit): String {
         // Decoding is fast compared to recognition: count it as the first 10%.
         // The decoder's final empty buffer can carry timestamp 0, so never go backwards.
         var decoded = 0
         val audio = decode(file, cancel) { pct ->
             decoded = maxOf(decoded, pct)
-            onUpdate(decoded / 10, "")
+            onUpdate(decoded, "")
         }
         val chunks = split(audio)
         val text = StringBuilder()
+        var msPerAudioSecond = INITIAL_MS_PER_AUDIO_S
         for ((i, range) in chunks.withIndex()) {
             cancel.throwIfSet()
+            val from = 100 + 900 * i / chunks.size
+            val to = 100 + 900 * (i + 1) / chunks.size
+            val seconds = (range.last + 1 - range.first).toDouble() / TARGET_RATE
+            val startedAt = SystemClock.elapsedRealtime()
+            val ticker = startTicker(from, to, seconds * msPerAudioSecond, text.toString(), onUpdate)
             val stream = recognizer.createStream()
             try {
                 stream.acceptWaveform(audio.copyOfRange(range.first, range.last + 1), TARGET_RATE)
@@ -44,10 +53,43 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
                 }
             } finally {
                 stream.release()
+                // Joined so that a late tick can't move the bar back after the update below.
+                ticker.interrupt()
+                ticker.join()
             }
-            onUpdate(10 + 90 * (i + 1) / chunks.size, text.toString())
+            msPerAudioSecond = (SystemClock.elapsedRealtime() - startedAt) / seconds
+            onUpdate(to, text.toString())
         }
         return text.toString()
+    }
+
+    /**
+     * The recognizer reports nothing while it works on a chunk, so move the bar
+     * on an estimate: it slows down as it nears [to] and never reaches it, which
+     * keeps it moving however wrong [expectedMs] is. Stop it by interrupting.
+     */
+    private fun startTicker(
+        from: Int,
+        to: Int,
+        expectedMs: Double,
+        text: String,
+        onUpdate: (Int, String) -> Unit,
+    ) = thread(isDaemon = true) {
+        val startedAt = SystemClock.elapsedRealtime()
+        var last = from
+        try {
+            while (true) {
+                Thread.sleep(TICK_MS)
+                val t = SystemClock.elapsedRealtime() - startedAt
+                val p = from + ((to - from) * (1 - exp(-2 * t / expectedMs))).toInt()
+                if (p != last && p < to) {
+                    last = p
+                    onUpdate(p, text)
+                }
+            }
+        } catch (e: InterruptedException) {
+            // Chunk finished.
+        }
     }
 
     /**
@@ -230,6 +272,10 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
     companion object {
         const val TARGET_RATE = 16000
         const val MAX_CHUNK_S = 30
+        private const val TICK_MS = 200L
+
+        // Guess for the first chunk; later chunks use the measured speed.
+        private const val INITIAL_MS_PER_AUDIO_S = 500.0
     }
 }
 
