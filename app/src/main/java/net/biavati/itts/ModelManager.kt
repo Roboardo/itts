@@ -109,6 +109,20 @@ object ModelManager {
     fun isInstalled(ctx: Context, model: SpeechModel) =
         model.files.all { (name, size) -> File(modelDir(ctx, model), name).length() == size }
 
+    /** Space used on disk, including any partial download. */
+    fun diskBytes(ctx: Context, model: SpeechModel) =
+        modelDir(ctx, model).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    @Synchronized
+    fun delete(ctx: Context, model: SpeechModel) {
+        if (loaded == model) {
+            recognizer?.release()
+            recognizer = null
+            loaded = null
+        }
+        modelDir(ctx, model).deleteRecursively()
+    }
+
     /** Returns the loaded recognizer, downloading the model first if needed. Blocking. */
     @Synchronized
     fun get(ctx: Context, model: SpeechModel, cancel: AtomicBoolean, onProgress: (String) -> Unit): OfflineRecognizer {

@@ -23,7 +23,12 @@ class Transcriber(private val recognizer: OfflineRecognizer) {
     /** [onUpdate] receives (progress 0..100, text so far). */
     fun transcribe(file: File, cancel: AtomicBoolean, onUpdate: (Int, String) -> Unit): String {
         // Decoding is fast compared to recognition: count it as the first 10%.
-        val audio = decode(file, cancel) { pct -> onUpdate(pct / 10, "") }
+        // The decoder's final empty buffer can carry timestamp 0, so never go backwards.
+        var decoded = 0
+        val audio = decode(file, cancel) { pct ->
+            decoded = maxOf(decoded, pct)
+            onUpdate(decoded / 10, "")
+        }
         val chunks = split(audio)
         val text = StringBuilder()
         for ((i, range) in chunks.withIndex()) {

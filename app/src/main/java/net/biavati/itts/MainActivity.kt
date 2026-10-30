@@ -39,6 +39,7 @@ open class MainActivity : Activity() {
     private lateinit var copyBtn: Button
     private lateinit var shareBtn: Button
     private var modelPicker: Spinner? = null
+    private var deleteBtn: Button? = null
     private var myJob: AtomicBoolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -171,6 +172,33 @@ open class MainActivity : Activity() {
         copyBtn.isEnabled = has
         shareBtn.isEnabled = has
         modelPicker?.isEnabled = !busy
+        deleteBtn?.isEnabled = !busy
+    }
+
+    private fun deleteModels() {
+        val models = SpeechModel.entries.filter { ModelManager.diskBytes(this, it) > 0 }
+        if (models.isEmpty()) {
+            Toast.makeText(this, "Nessun modello scaricato", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = models.map { "${it.label}, ${ModelManager.diskBytes(this, it) / 1_000_000} MB" }
+        val checked = BooleanArray(models.size)
+        AlertDialog.Builder(this)
+            .setTitle("Eliminare i modelli?")
+            .setMultiChoiceItems(labels.toTypedArray(), checked) { _, i, on -> checked[i] = on }
+            .setPositiveButton("Elimina") { _, _ ->
+                val chosen = models.filterIndexed { i, _ -> checked[i] }
+                // On the worker, so it can't overlap a transcription using the model.
+                if (chosen.isNotEmpty()) worker.execute {
+                    chosen.forEach { ModelManager.delete(applicationContext, it) }
+                    ui {
+                        showHint()
+                        Toast.makeText(this, "Eliminato", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
     }
 
     private fun copy() {
@@ -246,7 +274,16 @@ open class MainActivity : Activity() {
                     override fun onNothingSelected(parent: AdapterView<*>?) {}
                 }
             }
-            root.addView(modelPicker, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            deleteBtn = Button(this).apply {
+                text = "Elimina"
+                setOnClickListener { deleteModels() }
+            }
+            root.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(modelPicker, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(deleteBtn, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
 
         status = TextView(this).apply {

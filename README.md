@@ -30,7 +30,7 @@ Pick a speech model on the main screen; it is also used when sharing:
 | Preciso (Whisper Turbo) | ~1 GB | accuracy matters more than speed |
 
 The first time you use a model the app downloads it (Wi‑Fi recommended).
-After that it works offline.
+After that it works offline. **Elimina** frees the space used by downloaded models.
 
 ## Credits
 
