@@ -20,8 +20,8 @@ android {
         applicationId = "net.biavati.itts"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.1"
         // Only ship the ABI real phones use; keeps the APK small.
         ndk { abiFilters += listOf("arm64-v8a") }
     }
